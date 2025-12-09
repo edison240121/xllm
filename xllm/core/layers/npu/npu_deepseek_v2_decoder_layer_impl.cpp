@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <gflags/gflags.h>
 
+#include <iostream>
 #include <utility>
 
 #include "common/global_flags.h"
@@ -123,9 +124,39 @@ enum DecoderLayerTensorId : int {
   IN_MLP_DOWN_OFFSET_EXPERT = 81,
   IN_MLP_DOWN_SCALE_EXPERT = 82,
   IN_MLP_DOWN_COMPRESS_IDX_EXPERT = 83,
+
+  IN_INDEXER_WQ_B_WEIGHT = 84,
+  IN_INDEXER_WQ_B_BIAS = 85,
+  IN_INDEXER_WQ_B_DESCALE = 86,
+  IN_INDEXER_WQ_B_OFFSET = 87,
+  IN_INDEXER_WQ_B_SCALE = 88,
+  IN_INDEXER_WQ_B_COMPRESS_IDX = 89,
+
+  IN_INDEXER_WK_WEIGHT = 90,
+  IN_INDEXER_WK_BIAS = 91,
+  IN_INDEXER_WK_DESCALE = 92,
+  IN_INDEXER_WK_OFFSET = 93,
+  IN_INDEXER_WK_SCALE = 94,
+  IN_INDEXER_WK_COMPRESS_IDX = 95,
+
+  IN_INDEXER_K_NORM_WEIGHT = 96,
+  IN_INDEXER_K_NORM_BIAS = 97,
+
+  IN_INDEXER_PROJ_WEIGHT = 98,
+  IN_INDEXER_PROJ_BIAS = 99,
+  IN_INDEXER_PROJ_DESCALE = 100,
+  IN_INDEXER_PROJ_OFFSET = 101,
+  IN_INDEXER_PROJ_SCALE = 102,
+  IN_INDEXER_PROJ_COMPRESS_IDX = 103,
+  IN_Q_PROJ_A_RECOMPUTE_WEIGHT = 104,
+  IN_Q_PROJ_A_RECOMPUTE_BIAS = 105,
+  IN_Q_PROJ_A_RECOMPUTE_DESCALE = 106,
+  IN_Q_PROJ_A_RECOMPUTE_OFFSET = 107,
+  IN_Q_PROJ_A_RECOMPUTE_SCALE = 108,
+  IN_Q_PROJ_A_RECOMPUTE_COMPRESS_IDX = 109,
 };
 
-static const uint64_t WEIGHT_COUNT_PER_LAYER = 84;
+static const uint64_t WEIGHT_COUNT_PER_LAYER = 110;
 
 static std::vector<std::pair<int, std::string>> WEIGHT_MAPPING = {};
 
@@ -165,6 +196,12 @@ static const std::unordered_map<std::string, int> WEIGHT_MAPPING_W8A8 = {
     {"self_attn.o_proj.deq_scale", IN_ATTENTION_OUT_DESCALE},
     {"self_attn.o_proj.input_offset", IN_ATTENTION_OUT_OFFSET},
     {"self_attn.o_proj.input_scale", IN_ATTENTION_OUT_SCALE},
+
+    {"self_attn.indexer.wq_b.weight", IN_INDEXER_WQ_B_WEIGHT},
+    {"self_attn.indexer.wk.weight", IN_INDEXER_WK_WEIGHT},
+    {"self_attn.indexer.k_norm.weight", IN_INDEXER_K_NORM_WEIGHT},
+    {"self_attn.indexer.k_norm.bias", IN_INDEXER_K_NORM_BIAS},
+    {"self_attn.indexer.weights_proj.weight", IN_INDEXER_PROJ_WEIGHT},
 
     {"post_attention_layernorm.weight", IN_SELFATTENTION_OUT_NORM_WEIGHT},
     {"post_attention_layernorm.bias", IN_SELFATTENTION_OUT_NORM_BIAS},
@@ -212,6 +249,15 @@ static const std::unordered_map<std::string, int> WEIGHT_MAPPING_W8A8 = {
     {"down_proj.weight", IN_MLP_DOWN_WEIGHT_EXPERT},
     {"down_proj.weight_offset", IN_MLP_DOWN_OFFSET_EXPERT},
     {"down_proj.weight_scale", IN_MLP_DOWN_SCALE_EXPERT},
+};
+
+static const std::unordered_map<std::string, int>
+    WEIGHT_MAPPING_W8A8_RECOMPUTE = {
+        {"self_attn.q_a_proj.weight", IN_Q_PROJ_A_RECOMPUTE_WEIGHT},
+        {"self_attn.q_a_proj.quant_bias", IN_Q_PROJ_A_RECOMPUTE_BIAS},
+        {"self_attn.q_a_proj.deq_scale", IN_Q_PROJ_A_RECOMPUTE_DESCALE},
+        {"self_attn.q_a_proj.input_offset", IN_Q_PROJ_A_RECOMPUTE_OFFSET},
+        {"self_attn.q_a_proj.input_scale", IN_Q_PROJ_A_RECOMPUTE_SCALE},
 };
 
 static const std::map<int, int> WEIGHT_SHARD = {};
@@ -471,6 +517,10 @@ void NpuDeepseekV2DecoderLayerImpl::initialize_attention_parameters(
   param.enableFA3 = false;           // TODO
   param.isNzCache = false;           // TODO
   param.enableKvQuantLayer = false;  // TODO
+
+  param.index_head_dim = args.index_head_dim();
+  param.index_n_heads = args.index_n_heads();
+  param.index_topk = args.index_topk();
 }
 
 void NpuDeepseekV2DecoderLayerImpl::initialize_mlp_parameters(
@@ -850,6 +900,13 @@ void NpuDeepseekV2DecoderLayerImpl::process_general_weights(
 
   correct_tensor_dtype(tmp_tensor, name);
   at_weight_tensors_[index] = tmp_tensor;
+  std::cout << "------index: " << index << std::endl;
+  if (absl::StartsWith(name, "self_attn.q_a_proj")) {
+    const int index_re = get_mapped_index(name, WEIGHT_MAPPING_W8A8_RECOMPUTE);
+    torch::Tensor tmp_tensor_re = tensor.to(device_);
+    at_weight_tensors_[index_re] = tmp_tensor_re;
+    std::cout << "------index_re: " << index_re << std::endl;
+  }
 }
 
 void NpuDeepseekV2DecoderLayerImpl::set_kv_weight(
@@ -1049,6 +1106,9 @@ void NpuDeepseekV2DecoderLayerImpl::merge_loaded_weights() {
 
   at_weight_tensors_[IN_Q_PROJ_A_WEIGHT] = at_npu::native::npu_format_cast(
       at_weight_tensors_[IN_Q_PROJ_A_WEIGHT], 29);
+  at_weight_tensors_[IN_Q_PROJ_A_RECOMPUTE_WEIGHT] =
+      at_npu::native::npu_format_cast(
+          at_weight_tensors_[IN_Q_PROJ_A_RECOMPUTE_WEIGHT], 29);
   at_weight_tensors_[IN_Q_PROJ_B_WEIGHT] = at_npu::native::npu_format_cast(
       at_weight_tensors_[IN_Q_PROJ_B_WEIGHT], 29);
 
@@ -1721,6 +1781,28 @@ void NpuDeepseekV2DecoderLayerImpl::build_node_variant_pack(
                 model_name_ << " inTensor " << i << " is NULL");
     node.variantPack.inTensors.at(i) = *node.inTensors.at(i);
   }
+
+  std::cout << "-------5---------build_node_variant_pack ----------------- "
+            << std::endl;
+  node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31) =
+      atb_speed::Utils::AtTensor2Tensor(input_params.cum_q_seq_lens);
+  // node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31).hostData =
+  //     const_cast<int32_t*>(input_params[0].cum_q_seq_lens_vec.data());
+  std::cout << "-------4---------build_node_variant_pack ----------------- "
+            << std::endl;
+  if (!FLAGS_enable_continuous_kvcache) {
+    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 30) =
+        atb_speed::Utils::AtTensor2Tensor(kv_cache.get_index_cache());
+    std::cout << "-------4.1---------build_node_variant_pack ----------------- "
+              << std::endl;
+  } else {
+    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 30) =
+        XTensor2Tensor(kv_cache.get_v_xtensor());
+    std::cout << "-------4.2---------build_node_variant_pack ----------------- "
+              << std::endl;
+  }
+  std::cout << "-------7---------build_node_variant_pack ----------------- "
+            << std::endl;
 
   node.variantPack.outTensors.at(0) = internal_tensor_;
 }

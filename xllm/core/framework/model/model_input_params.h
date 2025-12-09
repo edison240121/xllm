@@ -96,12 +96,44 @@ struct ModelInputParams {
 
     params.kv_seq_lens = safe_to(kv_seq_lens, device, true);
     params.q_seq_lens = safe_to(q_seq_lens, device, true);
-
+    params.cum_q_seq_lens = safe_to(cum_q_seq_lens, device, true);
     params.new_cache_slots = safe_to(new_cache_slots, device, true);
     params.block_tables = safe_to(block_tables, device, true);
     params.kv_seq_lens_vec = kv_seq_lens_vec;
     params.q_seq_lens_vec = q_seq_lens_vec;
-
+    params.cum_q_seq_lens_vec = cum_q_seq_lens_vec;
+    std::cout << "---------------params.q_seq_lens: ";
+    for (size_t i = 0; i < params.q_seq_lens.numel(); ++i) {
+      std::cout << params.q_seq_lens[i];
+      if (i != params.q_seq_lens.numel() - 1) {
+        std::cout << ", ";
+      }
+    }
+    std::cout << std::endl;
+    std::cout << "---------------params.q_seq_lens_vec: ";
+    for (size_t i = 0; i < params.q_seq_lens_vec.size(); ++i) {
+      std::cout << params.q_seq_lens_vec[i];
+      if (i != params.q_seq_lens_vec.size() - 1) {
+        std::cout << ", ";
+      }
+    }
+    std::cout << std::endl;
+    std::cout << "---------------params.cum_q_seq_lens: ";
+    for (size_t i = 0; i < params.cum_q_seq_lens.numel(); ++i) {
+      std::cout << params.cum_q_seq_lens[i];
+      if (i != params.cum_q_seq_lens.numel() - 1) {
+        std::cout << ", ";
+      }
+    }
+    std::cout << std::endl;
+    std::cout << "---------------params.cum_q_seq_lens_vec: ";
+    for (size_t i = 0; i < params.cum_q_seq_lens_vec.size(); ++i) {
+      std::cout << params.cum_q_seq_lens_vec[i];
+      if (i != params.cum_q_seq_lens_vec.size() - 1) {
+        std::cout << ", ";
+      }
+    }
+    std::cout << std::endl;
     params.input_embedding = safe_to(input_embedding, device);
 
     params.deep_stacks = deep_stacks;
@@ -152,10 +184,13 @@ struct ModelInputParams {
               << " , q_max_seq_len is " << q_max_seq_len;
     LOG(INFO) << "ModelInputParams: kv_seq_lens_vec is " << kv_seq_lens_vec;
     LOG(INFO) << "ModelInputParams: q_seq_lens_vec is " << q_seq_lens_vec;
+    LOG(INFO) << "ModelInputParams: cum_q_seq_lens_vec is "
+              << cum_q_seq_lens_vec;
     LOG(INFO) << "ModelInputParams: batch_forward_type is "
               << batch_forward_type.to_string();
     print_tensor(kv_seq_lens, "ModelInputParams: kv_seq_lens", 4);
     print_tensor(q_seq_lens, "ModelInputParams: q_seq_lens", 4);
+    print_tensor(cum_q_seq_lens, "ModelInputParams: cum_q_seq_lens", 4);
     print_tensor(new_cache_slots, "ModelInputParams: new_cache_slots", 4);
     print_tensor(block_tables, "ModelInputParams: block_tables", 4);
     LOG(INFO) << "ModelInputParams: dp_global_token_nums is "
@@ -170,8 +205,10 @@ struct ModelInputParams {
 
   torch::Tensor q_seq_lens;
   torch::Tensor kv_seq_lens;
+  torch::Tensor cum_q_seq_lens;
   std::vector<int> kv_seq_lens_vec;
   std::vector<int> q_seq_lens_vec;
+  std::vector<int> cum_q_seq_lens_vec;
 
   // max length for qkv.
   int32_t kv_max_seq_len = 0;

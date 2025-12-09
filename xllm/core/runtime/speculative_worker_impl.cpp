@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "speculative_worker_impl.h"
 
+#include <iostream>
+
 #include "common/global_flags.h"
 #include "common/metrics.h"
 #include "framework/request/mm_data.h"
@@ -488,6 +490,9 @@ void SpeculativeWorkerImpl::prepare_validate_inputs(
   input_params.q_seq_lens_vec = std::move(q_seq_lens_vec);
   input_params.q_seq_lens =
       torch::tensor(input_params.q_seq_lens_vec, int_options);
+  input_params.cum_q_seq_lens =
+      torch::cumsum(input_params.q_seq_lens, 0, torch::kInt32);
+  std::cout << "------speculative_worker_impl.cpp-----1----" << std::endl;
   input_params.kv_max_seq_len =
       *std::max_element(kv_seq_lens_vec.begin(), kv_seq_lens_vec.end());
   input_params.kv_seq_lens_vec = std::move(kv_seq_lens_vec);

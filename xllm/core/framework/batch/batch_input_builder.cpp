@@ -18,6 +18,7 @@ limitations under the License.
 #include <c10/core/DeviceType.h>
 #include <torch/torch.h>
 
+#include <iostream>
 #include <thread>
 #include <vector>
 
@@ -293,6 +294,24 @@ void BatchInputBuilder::process_single_sequence(
 #if defined(USE_NPU)
   state.seq_lens.push_back(seq_len + offset);
   state.q_seq_lens.push_back(q_seq_len);
+  state.cum_q_seq_lens.push_back(q_seq_len);
+  std::cout << "------batch_input_builder.cpp-----2----" << std::endl;
+  std::cout << "--------batch_input_builder.cpp---1----state.q_seq_lens: ";
+  for (size_t i = 0; i < state.q_seq_lens.size(); ++i) {
+    std::cout << state.q_seq_lens[i];
+    if (i != state.q_seq_lens.size() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << std::endl;
+  std::cout << "---------batch_input_builder.cpp----2---state.cum_q_seq_lens: ";
+  for (size_t i = 0; i < state.cum_q_seq_lens.size(); ++i) {
+    std::cout << state.cum_q_seq_lens[i];
+    if (i != state.cum_q_seq_lens.size() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << std::endl;
 #elif defined(USE_MLU) || defined(USE_CUDA)
   state.seq_lens.push_back(state.seq_lens.back() + seq_len + offset);
   state.q_seq_lens.push_back(state.q_seq_lens.back() + q_seq_len);
@@ -567,12 +586,56 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
   input_params.q_max_seq_len = state_.q_max_seq_len;
   input_params.kv_seq_lens = torch::tensor(state_.seq_lens, torch::kInt);
   input_params.q_seq_lens = torch::tensor(state_.q_seq_lens, torch::kInt);
+  input_params.cum_q_seq_lens =
+      torch::cumsum(input_params.q_seq_lens, 0, torch::kInt32);
   input_params.kv_seq_lens_vec = std::move(state_.seq_lens);
   input_params.q_seq_lens_vec = std::move(state_.q_seq_lens);
+  input_params.cum_q_seq_lens_vec =
+      std::vector<int32_t>(input_params.cum_q_seq_lens.data_ptr<int32_t>(),
+                           input_params.cum_q_seq_lens.data_ptr<int32_t>() +
+                               input_params.cum_q_seq_lens.numel());
   input_params.new_cache_slots =
       torch::tensor(state_.new_token_slot_ids, torch::kInt);
-
-  // for flashinfer
+  std::cout << "---------------input_params.q_seq_lens: ";
+  for (size_t i = 0; i < input_params.q_seq_lens.numel(); ++i) {
+    std::cout << input_params.q_seq_lens[i];
+    if (i != input_params.q_seq_lens.numel() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << std::endl;
+  std::cout << "---------------input_params.q_seq_lens_vec: ";
+  for (size_t i = 0; i < input_params.q_seq_lens_vec.size(); ++i) {
+    std::cout << input_params.q_seq_lens_vec[i];
+    if (i != input_params.q_seq_lens_vec.size() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << std::endl;
+  std::cout << "---------------input_params.cum_q_seq_lens: ";
+  for (size_t i = 0; i < input_params.cum_q_seq_lens.numel(); ++i) {
+    std::cout << input_params.cum_q_seq_lens[i];
+    if (i != input_params.cum_q_seq_lens.numel() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << std::endl;
+  std::cout << "---------------input_params.cum_q_seq_lens_vec: ";
+  for (size_t i = 0; i < input_params.cum_q_seq_lens_vec.size(); ++i) {
+    std::cout << input_params.cum_q_seq_lens_vec[i];
+    if (i != input_params.cum_q_seq_lens_vec.size() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << std::endl;
+  std::cout << "---------input_params.q_seq_lens Device: "
+            << input_params.q_seq_lens.device() << std::endl;
+  // std::cout << "---------input_params.q_seq_lens_vec Device: " <<
+  // input_params.q_seq_lens_vec.device() << std::endl;
+  std::cout << "---------input_params.cum_q_seq_lens Device: "
+            << input_params.cum_q_seq_lens.device() << std::endl;
+  // std::cout << "---------input_params.cum_q_seq_lens_vec Device: " <<
+  // input_params.cum_q_seq_lens_vec.device() << std::endl; for flashinfer
   input_params.paged_kv_indptr =
       torch::tensor(state_.paged_kv_indptr, torch::kInt);
   input_params.paged_kv_indices =
@@ -658,6 +721,26 @@ RawForwardInput BatchInputBuilder::state_to_raw_forward_input() {
   raw_forward_input.q_max_seq_len = state_.q_max_seq_len;
   raw_forward_input.seq_lens = std::move(state_.seq_lens);
   raw_forward_input.q_seq_lens = std::move(state_.q_seq_lens);
+  raw_forward_input.cum_q_seq_lens = std::move(state_.cum_q_seq_lens);
+  std::cout << "------batch_input_builder.cpp-----5----" << std::endl;
+  std::cout << "--------batch_input_builder.cpp---3----raw_forward_input.q_seq_"
+               "lens: ";
+  for (size_t i = 0; i < raw_forward_input.q_seq_lens.size(); ++i) {
+    std::cout << raw_forward_input.q_seq_lens[i];
+    if (i != raw_forward_input.q_seq_lens.size() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << std::endl;
+  std::cout << "---------batch_input_builder.cpp----4---raw_forward_input.cum_"
+               "q_seq_lens: ";
+  for (size_t i = 0; i < raw_forward_input.cum_q_seq_lens.size(); ++i) {
+    std::cout << raw_forward_input.cum_q_seq_lens[i];
+    if (i != raw_forward_input.cum_q_seq_lens.size() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << std::endl;
   raw_forward_input.new_token_slot_ids = std::move(state_.new_token_slot_ids);
   raw_forward_input.block_tables_vec = std::move(state_.block_tables_vec);
   raw_forward_input.num_sequences = num_sequences_;

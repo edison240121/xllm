@@ -201,6 +201,7 @@ message ForwardInput {
   repeated float acc_logprob_vec = 37;
   uint64 batch_id = 38;
   int32 batch_forward_type = 39;
+  repeated int32  cum_q_seq_lens = 40;
 }
 
  message BatchedForwardInputs {
