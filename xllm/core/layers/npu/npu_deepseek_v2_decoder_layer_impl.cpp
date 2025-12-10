@@ -509,7 +509,8 @@ void NpuDeepseekV2DecoderLayerImpl::initialize_attention_parameters(
   param.kvLoraRank = args.kv_lora_rank();
   param.softmaxScale = sm_scale_;
   if (quantize_type_ == "w8a8_dynamic" && num_speculative_tokens_ == 0) {
-    param.enableMlaPreprocess = param.isBF16 ? false : true;
+    // param.enableMlaPreprocess = param.isBF16 ? false : true;
+    param.enableMlaPreprocess = true;
   } else {
     param.enableMlaPreprocess = false;
   }
@@ -1588,6 +1589,7 @@ torch::Tensor NpuDeepseekV2DecoderLayerImpl::forward(
   ModelInputParams& input_params_new =
       const_cast<ModelInputParams&>(input_params);
   if (input_params.global_empty_kv_cache) {
+    std::cout << "----------prefill--------" << std::endl;
     build_node_variant_pack(prefill_node_,
                             x,
                             cos_pos,
@@ -1605,6 +1607,7 @@ torch::Tensor NpuDeepseekV2DecoderLayerImpl::forward(
     // customize mla kernel. once detect any input exceed the limit, fall back
     // to default kernel.
     const int num_tokens_limit = 230;
+    std::cout << "----------decode--------" << std::endl;
     if (!FLAGS_enable_customize_mla_kernel || num_tokens >= num_tokens_limit) {
       build_node_variant_pack(decode_node_,
                               x,
@@ -1785,9 +1788,11 @@ void NpuDeepseekV2DecoderLayerImpl::build_node_variant_pack(
   std::cout << "-------5---------build_node_variant_pack ----------------- "
             << std::endl;
   node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31) =
-      atb_speed::Utils::AtTensor2Tensor(input_params.cum_q_seq_lens);
+      atb_speed::Utils::AtTensor2Tensor(
+          torch::cumsum(input_params.q_seq_lens, 0, torch::kInt32));
+
   // node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31).hostData =
-  //     const_cast<int32_t*>(input_params[0].cum_q_seq_lens_vec.data());
+  //     const_cast<int32_t*>(input_params.cum_q_seq_lens_vec.data());
   std::cout << "-------4---------build_node_variant_pack ----------------- "
             << std::endl;
   if (!FLAGS_enable_continuous_kvcache) {
@@ -1803,7 +1808,38 @@ void NpuDeepseekV2DecoderLayerImpl::build_node_variant_pack(
   }
   std::cout << "-------7---------build_node_variant_pack ----------------- "
             << std::endl;
-
+  std::cout << "--------123-------input_params.q_seq_lens: ";
+  for (size_t i = 0; i < input_params.q_seq_lens.numel(); ++i) {
+    std::cout << input_params.q_seq_lens[i];
+    if (i != input_params.q_seq_lens.numel() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << std::endl;
+  std::cout << "-------123--------input_params.q_seq_lens_vec: ";
+  for (size_t i = 0; i < input_params.q_seq_lens_vec.size(); ++i) {
+    std::cout << input_params.q_seq_lens_vec[i];
+    if (i != input_params.q_seq_lens_vec.size() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << std::endl;
+  std::cout << "------123---------input_params.cum_q_seq_lens: ";
+  for (size_t i = 0; i < input_params.cum_q_seq_lens.numel(); ++i) {
+    std::cout << input_params.cum_q_seq_lens[i];
+    if (i != input_params.cum_q_seq_lens.numel() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << std::endl;
+  std::cout << "------123---------input_params.cum_q_seq_lens_vec: ";
+  for (size_t i = 0; i < input_params.cum_q_seq_lens_vec.size(); ++i) {
+    std::cout << input_params.cum_q_seq_lens_vec[i];
+    if (i != input_params.cum_q_seq_lens_vec.size() - 1) {
+      std::cout << ", ";
+    }
+  }
+  std::cout << std::endl;
   node.variantPack.outTensors.at(0) = internal_tensor_;
 }
 

@@ -294,24 +294,6 @@ void BatchInputBuilder::process_single_sequence(
 #if defined(USE_NPU)
   state.seq_lens.push_back(seq_len + offset);
   state.q_seq_lens.push_back(q_seq_len);
-  state.cum_q_seq_lens.push_back(q_seq_len);
-  std::cout << "------batch_input_builder.cpp-----2----" << std::endl;
-  std::cout << "--------batch_input_builder.cpp---1----state.q_seq_lens: ";
-  for (size_t i = 0; i < state.q_seq_lens.size(); ++i) {
-    std::cout << state.q_seq_lens[i];
-    if (i != state.q_seq_lens.size() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
-  std::cout << "---------batch_input_builder.cpp----2---state.cum_q_seq_lens: ";
-  for (size_t i = 0; i < state.cum_q_seq_lens.size(); ++i) {
-    std::cout << state.cum_q_seq_lens[i];
-    if (i != state.cum_q_seq_lens.size() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
 #elif defined(USE_MLU) || defined(USE_CUDA)
   state.seq_lens.push_back(state.seq_lens.back() + seq_len + offset);
   state.q_seq_lens.push_back(state.q_seq_lens.back() + q_seq_len);
