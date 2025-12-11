@@ -908,6 +908,9 @@ void NpuDeepseekV2DecoderLayerImpl::process_general_weights(
     at_weight_tensors_[index_re] = tmp_tensor_re;
     std::cout << "------index_re: " << index_re << std::endl;
   }
+  if (layer_id_ != 61 && absl::StrContains(name, "layernorm.weight")) {
+    at_weight_tensors_[index + 1] = torch::zeros_like(tmp_tensor);
+  }
 }
 
 void NpuDeepseekV2DecoderLayerImpl::set_kv_weight(
@@ -1140,6 +1143,8 @@ void NpuDeepseekV2DecoderLayerImpl::merge_loaded_weights() {
     if (!prefill_param_.isBF16) {
       at_weight_tensors_[IN_Q_PROJ_A_DESCALE] =
           convert_fp16_to_int64(at_weight_tensors_[IN_Q_PROJ_A_DESCALE]);
+      at_weight_tensors_[IN_Q_PROJ_A_RECOMPUTE_DESCALE] = convert_fp16_to_int64(
+          at_weight_tensors_[IN_Q_PROJ_A_RECOMPUTE_DESCALE]);
       at_weight_tensors_[IN_Q_PROJ_B_DESCALE] =
           convert_fp16_to_int64(at_weight_tensors_[IN_Q_PROJ_B_DESCALE]);
       at_weight_tensors_[IN_ATTENTION_OUT_DESCALE] =
@@ -1784,15 +1789,6 @@ void NpuDeepseekV2DecoderLayerImpl::build_node_variant_pack(
                 model_name_ << " inTensor " << i << " is NULL");
     node.variantPack.inTensors.at(i) = *node.inTensors.at(i);
   }
-
-  std::cout << "-------5---------build_node_variant_pack ----------------- "
-            << std::endl;
-  node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31) =
-      atb_speed::Utils::AtTensor2Tensor(
-          torch::cumsum(input_params.q_seq_lens, 0, torch::kInt32));
-
-  // node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31).hostData =
-  //     const_cast<int32_t*>(input_params.cum_q_seq_lens_vec.data());
   std::cout << "-------4---------build_node_variant_pack ----------------- "
             << std::endl;
   if (!FLAGS_enable_continuous_kvcache) {
@@ -1806,9 +1802,20 @@ void NpuDeepseekV2DecoderLayerImpl::build_node_variant_pack(
     std::cout << "-------4.2---------build_node_variant_pack ----------------- "
               << std::endl;
   }
-  std::cout << "-------7---------build_node_variant_pack ----------------- "
+  std::cout << "-------5---------build_node_variant_pack ----------------- "
             << std::endl;
-  std::cout << "--------123-------input_params.q_seq_lens: ";
+  if (input_params.q_seq_lens.numel() != 0) {
+    std::cout << "input_params.q_seq_lens is not null " << std::endl;
+    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31) =
+        atb_speed::Utils::AtTensor2Tensor(input_params.cum_q_seq_lens);
+  } else {
+    std::cout << "input_params.q_seq_lens is null " << std::endl;
+    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31) =
+        atb_speed::Utils::AtTensor2Tensor(int_tensor_placeholder_);
+  }
+  std::cout << "-------6---------build_node_variant_pack ----------------- "
+            << std::endl;
+  std::cout << "--------123-------input_params.q_seq_lens: " << std::endl;
   for (size_t i = 0; i < input_params.q_seq_lens.numel(); ++i) {
     std::cout << input_params.q_seq_lens[i];
     if (i != input_params.q_seq_lens.numel() - 1) {
@@ -1816,7 +1823,7 @@ void NpuDeepseekV2DecoderLayerImpl::build_node_variant_pack(
     }
   }
   std::cout << std::endl;
-  std::cout << "-------123--------input_params.q_seq_lens_vec: ";
+  std::cout << "-------123--------input_params.q_seq_lens_vec: " << std::endl;
   for (size_t i = 0; i < input_params.q_seq_lens_vec.size(); ++i) {
     std::cout << input_params.q_seq_lens_vec[i];
     if (i != input_params.q_seq_lens_vec.size() - 1) {
@@ -1824,18 +1831,10 @@ void NpuDeepseekV2DecoderLayerImpl::build_node_variant_pack(
     }
   }
   std::cout << std::endl;
-  std::cout << "------123---------input_params.cum_q_seq_lens: ";
+  std::cout << "-------123--------input_params.cum_q_seq_lens: " << std::endl;
   for (size_t i = 0; i < input_params.cum_q_seq_lens.numel(); ++i) {
     std::cout << input_params.cum_q_seq_lens[i];
     if (i != input_params.cum_q_seq_lens.numel() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
-  std::cout << "------123---------input_params.cum_q_seq_lens_vec: ";
-  for (size_t i = 0; i < input_params.cum_q_seq_lens_vec.size(); ++i) {
-    std::cout << input_params.cum_q_seq_lens_vec[i];
-    if (i != input_params.cum_q_seq_lens_vec.size() - 1) {
       std::cout << ", ";
     }
   }
