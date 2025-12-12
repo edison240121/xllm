@@ -102,38 +102,6 @@ struct ModelInputParams {
     params.kv_seq_lens_vec = kv_seq_lens_vec;
     params.q_seq_lens_vec = q_seq_lens_vec;
     params.cum_q_seq_lens_vec = cum_q_seq_lens_vec;
-    std::cout << "---------------params.q_seq_lens: ";
-    for (size_t i = 0; i < params.q_seq_lens.numel(); ++i) {
-      std::cout << params.q_seq_lens[i];
-      if (i != params.q_seq_lens.numel() - 1) {
-        std::cout << ", ";
-      }
-    }
-    std::cout << std::endl;
-    std::cout << "---------------params.q_seq_lens_vec: ";
-    for (size_t i = 0; i < params.q_seq_lens_vec.size(); ++i) {
-      std::cout << params.q_seq_lens_vec[i];
-      if (i != params.q_seq_lens_vec.size() - 1) {
-        std::cout << ", ";
-      }
-    }
-    std::cout << std::endl;
-    std::cout << "---------------params.cum_q_seq_lens: ";
-    for (size_t i = 0; i < params.cum_q_seq_lens.numel(); ++i) {
-      std::cout << params.cum_q_seq_lens[i];
-      if (i != params.cum_q_seq_lens.numel() - 1) {
-        std::cout << ", ";
-      }
-    }
-    std::cout << std::endl;
-    std::cout << "---------------params.cum_q_seq_lens_vec: ";
-    for (size_t i = 0; i < params.cum_q_seq_lens_vec.size(); ++i) {
-      std::cout << params.cum_q_seq_lens_vec[i];
-      if (i != params.cum_q_seq_lens_vec.size() - 1) {
-        std::cout << ", ";
-      }
-    }
-    std::cout << std::endl;
     params.input_embedding = safe_to(input_embedding, device);
 
     params.deep_stacks = deep_stacks;

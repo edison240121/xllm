@@ -671,26 +671,6 @@ RawForwardInput BatchInputBuilder::state_to_raw_forward_input() {
               cum_tensor.numel() * sizeof(int));
   ;
   raw_forward_input.cum_q_seq_lens = cum_vec;
-  std::cout << "--------batch_input_builder.cpp-------raw_forward_input.q_seq_"
-               "lens: "
-            << std::endl;
-  for (size_t i = 0; i < raw_forward_input.q_seq_lens.size(); ++i) {
-    std::cout << raw_forward_input.q_seq_lens[i];
-    if (i != raw_forward_input.q_seq_lens.size() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
-  std::cout << "---------batch_input_builder.cpp-----raw_forward_input.cum_"
-               "q_seq_lens: "
-            << std::endl;
-  for (size_t i = 0; i < raw_forward_input.cum_q_seq_lens.size(); ++i) {
-    std::cout << raw_forward_input.cum_q_seq_lens[i];
-    if (i != raw_forward_input.cum_q_seq_lens.size() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
   raw_forward_input.new_token_slot_ids = std::move(state_.new_token_slot_ids);
   raw_forward_input.block_tables_vec = std::move(state_.block_tables_vec);
   raw_forward_input.num_sequences = num_sequences_;

@@ -901,12 +901,10 @@ void NpuDeepseekV2DecoderLayerImpl::process_general_weights(
 
   correct_tensor_dtype(tmp_tensor, name);
   at_weight_tensors_[index] = tmp_tensor;
-  std::cout << "------index: " << index << std::endl;
   if (absl::StartsWith(name, "self_attn.q_a_proj")) {
     const int index_re = get_mapped_index(name, WEIGHT_MAPPING_W8A8_RECOMPUTE);
     torch::Tensor tmp_tensor_re = tensor.to(device_);
     at_weight_tensors_[index_re] = tmp_tensor_re;
-    std::cout << "------index_re: " << index_re << std::endl;
   }
   if (layer_id_ != 61 && absl::StrContains(name, "layernorm.weight")) {
     at_weight_tensors_[index + 1] = torch::zeros_like(tmp_tensor);
@@ -1594,7 +1592,6 @@ torch::Tensor NpuDeepseekV2DecoderLayerImpl::forward(
   ModelInputParams& input_params_new =
       const_cast<ModelInputParams&>(input_params);
   if (input_params.global_empty_kv_cache) {
-    std::cout << "----------prefill--------" << std::endl;
     build_node_variant_pack(prefill_node_,
                             x,
                             cos_pos,
@@ -1612,7 +1609,6 @@ torch::Tensor NpuDeepseekV2DecoderLayerImpl::forward(
     // customize mla kernel. once detect any input exceed the limit, fall back
     // to default kernel.
     const int num_tokens_limit = 230;
-    std::cout << "----------decode--------" << std::endl;
     if (!FLAGS_enable_customize_mla_kernel || num_tokens >= num_tokens_limit) {
       build_node_variant_pack(decode_node_,
                               x,
@@ -1789,56 +1785,20 @@ void NpuDeepseekV2DecoderLayerImpl::build_node_variant_pack(
                 model_name_ << " inTensor " << i << " is NULL");
     node.variantPack.inTensors.at(i) = *node.inTensors.at(i);
   }
-  std::cout << "-------4---------build_node_variant_pack ----------------- "
-            << std::endl;
   if (!FLAGS_enable_continuous_kvcache) {
     node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 30) =
         atb_speed::Utils::AtTensor2Tensor(kv_cache.get_index_cache());
-    std::cout << "-------4.1---------build_node_variant_pack ----------------- "
-              << std::endl;
   } else {
     node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 30) =
         XTensor2Tensor(kv_cache.get_v_xtensor());
-    std::cout << "-------4.2---------build_node_variant_pack ----------------- "
-              << std::endl;
   }
-  std::cout << "-------5---------build_node_variant_pack ----------------- "
-            << std::endl;
   if (input_params.q_seq_lens.numel() != 0) {
-    std::cout << "input_params.q_seq_lens is not null " << std::endl;
     node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31) =
         atb_speed::Utils::AtTensor2Tensor(input_params.cum_q_seq_lens);
   } else {
-    std::cout << "input_params.q_seq_lens is null " << std::endl;
     node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31) =
         atb_speed::Utils::AtTensor2Tensor(int_tensor_placeholder_);
   }
-  std::cout << "-------6---------build_node_variant_pack ----------------- "
-            << std::endl;
-  std::cout << "--------123-------input_params.q_seq_lens: " << std::endl;
-  for (size_t i = 0; i < input_params.q_seq_lens.numel(); ++i) {
-    std::cout << input_params.q_seq_lens[i];
-    if (i != input_params.q_seq_lens.numel() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
-  std::cout << "-------123--------input_params.q_seq_lens_vec: " << std::endl;
-  for (size_t i = 0; i < input_params.q_seq_lens_vec.size(); ++i) {
-    std::cout << input_params.q_seq_lens_vec[i];
-    if (i != input_params.q_seq_lens_vec.size() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
-  std::cout << "-------123--------input_params.cum_q_seq_lens: " << std::endl;
-  for (size_t i = 0; i < input_params.cum_q_seq_lens.numel(); ++i) {
-    std::cout << input_params.cum_q_seq_lens[i];
-    if (i != input_params.cum_q_seq_lens.numel() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
   node.variantPack.outTensors.at(0) = internal_tensor_;
 }
 

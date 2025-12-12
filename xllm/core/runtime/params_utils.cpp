@@ -68,22 +68,6 @@ void proto_to_forward_input(const proto::ForwardInput* pb_forward_input,
   std::vector<int32_t> cum_q_seq_lens =
       std::vector<int32_t>(pb_forward_input->cum_q_seq_lens().begin(),
                            pb_forward_input->cum_q_seq_lens().end());
-  std::cout << "--------params_utils.cpp---1----q_seq_lens: ";
-  for (size_t i = 0; i < q_seq_lens.size(); ++i) {
-    std::cout << q_seq_lens[i];
-    if (i != q_seq_lens.size() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
-  std::cout << "---------params_utils.cpp----1---cum_q_seq_lens: ";
-  for (size_t i = 0; i < cum_q_seq_lens.size(); ++i) {
-    std::cout << cum_q_seq_lens[i];
-    if (i != cum_q_seq_lens.size() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
   // for flashinfer
   std::vector<int32_t> paged_kv_indptr =
       std::vector<int32_t>(pb_forward_input->paged_kv_indptr().begin(),
@@ -213,23 +197,6 @@ void proto_to_forward_input(const proto::ForwardInput* pb_forward_input,
   input_params.cum_q_seq_lens = torch::tensor(cum_q_seq_lens, tensor_options);
   input_params.kv_seq_lens_vec = std::move(seq_lens);
   input_params.q_seq_lens_vec = std::move(q_seq_lens);
-  std::cout << "--------params_utils.cpp---2----input_params.q_seq_lens: ";
-  for (size_t i = 0; i < input_params.q_seq_lens.numel(); ++i) {
-    std::cout << input_params.q_seq_lens[i];
-    if (i != input_params.q_seq_lens.numel() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
-  std::cout
-      << "--------params_utils.cpp---2-------input_params.cum_q_seq_lens: ";
-  for (size_t i = 0; i < input_params.cum_q_seq_lens.numel(); ++i) {
-    std::cout << input_params.cum_q_seq_lens[i];
-    if (i != input_params.cum_q_seq_lens.numel() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
   input_params.paged_kv_indptr = torch::tensor(paged_kv_indptr, tensor_options);
   input_params.paged_kv_indices =
       torch::tensor(paged_kv_indices, tensor_options);
@@ -419,22 +386,6 @@ void forward_input_to_proto(const RawForwardInput& inputs,
                       inputs.q_seq_lens);
   ADD_VECTOR_TO_PROTO(pb_forward_input->mutable_cum_q_seq_lens(),
                       inputs.cum_q_seq_lens);
-  std::cout << "--------params_utils.cpp---4.1----inputs.q_seq_lens: ";
-  for (size_t i = 0; i < inputs.q_seq_lens.size(); ++i) {
-    std::cout << inputs.q_seq_lens[i];
-    if (i != inputs.q_seq_lens.size() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
-  std::cout << "---------params_utils.cpp----4.2---inputs.cum_q_seq_lens: ";
-  for (size_t i = 0; i < inputs.cum_q_seq_lens.size(); ++i) {
-    std::cout << inputs.cum_q_seq_lens[i];
-    if (i != inputs.cum_q_seq_lens.size() - 1) {
-      std::cout << ", ";
-    }
-  }
-  std::cout << std::endl;
   // for flashinfer
   ADD_VECTOR_TO_PROTO(pb_forward_input->mutable_paged_kv_indptr(),
                       inputs.paged_kv_indptr);
