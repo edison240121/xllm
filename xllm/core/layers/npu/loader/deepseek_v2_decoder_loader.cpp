@@ -16,8 +16,6 @@ limitations under the License.
 
 #include <torch_npu/csrc/core/npu/NPUFormat.h>
 
-#include <iostream>
-
 namespace xllm {
 namespace layer {
 
@@ -601,8 +599,6 @@ void DeekseekV2DecoderLoader::process_general_weights(
                           : tensor.to(device_);
 
   correct_tensor_dtype(tmp_tensor, name);
-  std::cout << "------------" << index << ": " << tmp_tensor.sizes()
-            << std::endl;
   at_weight_tensors_[index] = tmp_tensor;
   if (absl::StartsWith(name, "self_attn.q_a_proj")) {
     const int index_re = get_mapped_index(name, WEIGHT_MAPPING_W8A8_RECOMPUTE);
