@@ -16,6 +16,8 @@ limitations under the License.
 
 #include <torch_npu/csrc/core/npu/NPUFormat.h>
 
+#include <iostream>
+
 namespace xllm {
 namespace layer {
 
@@ -118,6 +120,36 @@ enum DecoderLayerTensorId : int {
   IN_MLP_DOWN_OFFSET_EXPERT = 81,
   IN_MLP_DOWN_SCALE_EXPERT = 82,
   IN_MLP_DOWN_COMPRESS_IDX_EXPERT = 83,
+
+  IN_INDEXER_WQ_B_WEIGHT = 84,
+  IN_INDEXER_WQ_B_BIAS = 85,
+  IN_INDEXER_WQ_B_DESCALE = 86,
+  IN_INDEXER_WQ_B_OFFSET = 87,
+  IN_INDEXER_WQ_B_SCALE = 88,
+  IN_INDEXER_WQ_B_COMPRESS_IDX = 89,
+
+  IN_INDEXER_WK_WEIGHT = 90,
+  IN_INDEXER_WK_BIAS = 91,
+  IN_INDEXER_WK_DESCALE = 92,
+  IN_INDEXER_WK_OFFSET = 93,
+  IN_INDEXER_WK_SCALE = 94,
+  IN_INDEXER_WK_COMPRESS_IDX = 95,
+
+  IN_INDEXER_K_NORM_WEIGHT = 96,
+  IN_INDEXER_K_NORM_BIAS = 97,
+
+  IN_INDEXER_PROJ_WEIGHT = 98,
+  IN_INDEXER_PROJ_BIAS = 99,
+  IN_INDEXER_PROJ_DESCALE = 100,
+  IN_INDEXER_PROJ_OFFSET = 101,
+  IN_INDEXER_PROJ_SCALE = 102,
+  IN_INDEXER_PROJ_COMPRESS_IDX = 103,
+  IN_Q_PROJ_A_RECOMPUTE_WEIGHT = 104,
+  IN_Q_PROJ_A_RECOMPUTE_BIAS = 105,
+  IN_Q_PROJ_A_RECOMPUTE_DESCALE = 106,
+  IN_Q_PROJ_A_RECOMPUTE_OFFSET = 107,
+  IN_Q_PROJ_A_RECOMPUTE_SCALE = 108,
+  IN_Q_PROJ_A_RECOMPUTE_COMPRESS_IDX = 109,
 };
 
 static std::vector<std::pair<int, std::string>> WEIGHT_MAPPING = {};
@@ -158,6 +190,12 @@ static const std::unordered_map<std::string, int> WEIGHT_MAPPING_W8A8 = {
     {"self_attn.o_proj.deq_scale", IN_ATTENTION_OUT_DESCALE},
     {"self_attn.o_proj.input_offset", IN_ATTENTION_OUT_OFFSET},
     {"self_attn.o_proj.input_scale", IN_ATTENTION_OUT_SCALE},
+
+    {"self_attn.indexer.wq_b.weight", IN_INDEXER_WQ_B_WEIGHT},
+    {"self_attn.indexer.wk.weight", IN_INDEXER_WK_WEIGHT},
+    {"self_attn.indexer.k_norm.weight", IN_INDEXER_K_NORM_WEIGHT},
+    {"self_attn.indexer.k_norm.bias", IN_INDEXER_K_NORM_BIAS},
+    {"self_attn.indexer.weights_proj.weight", IN_INDEXER_PROJ_WEIGHT},
 
     {"post_attention_layernorm.weight", IN_SELFATTENTION_OUT_NORM_WEIGHT},
     {"post_attention_layernorm.bias", IN_SELFATTENTION_OUT_NORM_BIAS},
@@ -205,6 +243,15 @@ static const std::unordered_map<std::string, int> WEIGHT_MAPPING_W8A8 = {
     {"down_proj.weight", IN_MLP_DOWN_WEIGHT_EXPERT},
     {"down_proj.weight_offset", IN_MLP_DOWN_OFFSET_EXPERT},
     {"down_proj.weight_scale", IN_MLP_DOWN_SCALE_EXPERT},
+};
+
+static const std::unordered_map<std::string, int>
+    WEIGHT_MAPPING_W8A8_RECOMPUTE = {
+        {"self_attn.q_a_proj.weight", IN_Q_PROJ_A_RECOMPUTE_WEIGHT},
+        {"self_attn.q_a_proj.quant_bias", IN_Q_PROJ_A_RECOMPUTE_BIAS},
+        {"self_attn.q_a_proj.deq_scale", IN_Q_PROJ_A_RECOMPUTE_DESCALE},
+        {"self_attn.q_a_proj.input_offset", IN_Q_PROJ_A_RECOMPUTE_OFFSET},
+        {"self_attn.q_a_proj.input_scale", IN_Q_PROJ_A_RECOMPUTE_SCALE},
 };
 
 static const std::map<int, int> WEIGHT_SHARD = {};
@@ -554,7 +601,17 @@ void DeekseekV2DecoderLoader::process_general_weights(
                           : tensor.to(device_);
 
   correct_tensor_dtype(tmp_tensor, name);
+  std::cout << "------------" << index << ": " << tmp_tensor.sizes()
+            << std::endl;
   at_weight_tensors_[index] = tmp_tensor;
+  if (absl::StartsWith(name, "self_attn.q_a_proj")) {
+    const int index_re = get_mapped_index(name, WEIGHT_MAPPING_W8A8_RECOMPUTE);
+    torch::Tensor tmp_tensor_re = tensor.to(device_);
+    at_weight_tensors_[index_re] = tmp_tensor_re;
+  }
+  if (layer_id_ != 61 && absl::StrContains(name, "layernorm.weight")) {
+    at_weight_tensors_[index + 1] = torch::zeros_like(tmp_tensor);
+  }
 }
 
 void DeekseekV2DecoderLoader::process_mlp_common_weights(
@@ -934,6 +991,9 @@ void DeekseekV2DecoderLoader::merge_loaded_weights() {
 
   at_weight_tensors_[IN_Q_PROJ_A_WEIGHT] = at_npu::native::npu_format_cast(
       at_weight_tensors_[IN_Q_PROJ_A_WEIGHT], 29);
+  at_weight_tensors_[IN_Q_PROJ_A_RECOMPUTE_WEIGHT] =
+      at_npu::native::npu_format_cast(
+          at_weight_tensors_[IN_Q_PROJ_A_RECOMPUTE_WEIGHT], 29);
   at_weight_tensors_[IN_Q_PROJ_B_WEIGHT] = at_npu::native::npu_format_cast(
       at_weight_tensors_[IN_Q_PROJ_B_WEIGHT], 29);
 
@@ -958,12 +1018,23 @@ void DeekseekV2DecoderLoader::merge_loaded_weights() {
   // at_weight_tensors_[IN_MLP_DOWN_WEIGHT_SHARED_EXPERT].transpose(0, 1);
   at_weight_tensors_[IN_BLOCK_SPARSE_MOE_GATE_WEIGHT] =
       at_weight_tensors_[IN_BLOCK_SPARSE_MOE_GATE_WEIGHT].to(torch::kFloat32);
+  at_weight_tensors_[IN_MLP_GATEUP_SCALE_EXPERT] =
+      at_weight_tensors_[IN_MLP_GATEUP_SCALE_EXPERT].to(torch::kBFloat16);
+  at_weight_tensors_[IN_MLP_GATEUP_SCALE_SHARED_EXPERT] =
+      at_weight_tensors_[IN_MLP_GATEUP_SCALE_SHARED_EXPERT].to(
+          torch::kBFloat16);
+  at_weight_tensors_[IN_MLP_DOWN_SCALE_EXPERT] =
+      at_weight_tensors_[IN_MLP_DOWN_SCALE_EXPERT].to(torch::kBFloat16);
+  at_weight_tensors_[IN_MLP_DOWN_SCALE_SHARED_EXPERT] =
+      at_weight_tensors_[IN_MLP_DOWN_SCALE_SHARED_EXPERT].to(torch::kBFloat16);
   if (quantize_type_ == "w8a8_dynamic") {
     // at_weight_tensors_[IN_BLOCK_SPARSE_MOE_GATE_WEIGHT] =
     //     at_weight_tensors_[IN_BLOCK_SPARSE_MOE_GATE_WEIGHT].to(torch::kFloat32);
     if (!prefill_isBF16_) {
       at_weight_tensors_[IN_Q_PROJ_A_DESCALE] =
           convert_fp16_to_int64(at_weight_tensors_[IN_Q_PROJ_A_DESCALE]);
+      at_weight_tensors_[IN_Q_PROJ_A_RECOMPUTE_DESCALE] = convert_fp16_to_int64(
+          at_weight_tensors_[IN_Q_PROJ_A_RECOMPUTE_DESCALE]);
       at_weight_tensors_[IN_Q_PROJ_B_DESCALE] =
           convert_fp16_to_int64(at_weight_tensors_[IN_Q_PROJ_B_DESCALE]);
       at_weight_tensors_[IN_ATTENTION_OUT_DESCALE] =
@@ -980,8 +1051,6 @@ void DeekseekV2DecoderLoader::merge_loaded_weights() {
               torch::kFloat32);
       at_weight_tensors_[IN_MLP_GATEUP_OFFSET_EXPERT] =
           at_weight_tensors_[IN_MLP_GATEUP_OFFSET_EXPERT].to(torch::kFloat16);
-      at_weight_tensors_[IN_MLP_GATEUP_SCALE_EXPERT] =
-          at_weight_tensors_[IN_MLP_GATEUP_SCALE_EXPERT].to(torch::kFloat32);
       at_weight_tensors_[IN_MLP_DOWN_OFFSET_EXPERT] =
           at_weight_tensors_[IN_MLP_DOWN_OFFSET_EXPERT].to(torch::kFloat16);
       at_weight_tensors_[IN_MLP_DOWN_SCALE_EXPERT] =

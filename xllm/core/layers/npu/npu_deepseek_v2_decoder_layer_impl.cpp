@@ -125,9 +125,39 @@ enum DecoderLayerTensorId : int {
   IN_MLP_DOWN_OFFSET_EXPERT = 81,
   IN_MLP_DOWN_SCALE_EXPERT = 82,
   IN_MLP_DOWN_COMPRESS_IDX_EXPERT = 83,
+
+  IN_INDEXER_WQ_B_WEIGHT = 84,
+  IN_INDEXER_WQ_B_BIAS = 85,
+  IN_INDEXER_WQ_B_DESCALE = 86,
+  IN_INDEXER_WQ_B_OFFSET = 87,
+  IN_INDEXER_WQ_B_SCALE = 88,
+  IN_INDEXER_WQ_B_COMPRESS_IDX = 89,
+
+  IN_INDEXER_WK_WEIGHT = 90,
+  IN_INDEXER_WK_BIAS = 91,
+  IN_INDEXER_WK_DESCALE = 92,
+  IN_INDEXER_WK_OFFSET = 93,
+  IN_INDEXER_WK_SCALE = 94,
+  IN_INDEXER_WK_COMPRESS_IDX = 95,
+
+  IN_INDEXER_K_NORM_WEIGHT = 96,
+  IN_INDEXER_K_NORM_BIAS = 97,
+
+  IN_INDEXER_PROJ_WEIGHT = 98,
+  IN_INDEXER_PROJ_BIAS = 99,
+  IN_INDEXER_PROJ_DESCALE = 100,
+  IN_INDEXER_PROJ_OFFSET = 101,
+  IN_INDEXER_PROJ_SCALE = 102,
+  IN_INDEXER_PROJ_COMPRESS_IDX = 103,
+  IN_Q_PROJ_A_RECOMPUTE_WEIGHT = 104,
+  IN_Q_PROJ_A_RECOMPUTE_BIAS = 105,
+  IN_Q_PROJ_A_RECOMPUTE_DESCALE = 106,
+  IN_Q_PROJ_A_RECOMPUTE_OFFSET = 107,
+  IN_Q_PROJ_A_RECOMPUTE_SCALE = 108,
+  IN_Q_PROJ_A_RECOMPUTE_COMPRESS_IDX = 109,
 };
 
-static const uint64_t WEIGHT_COUNT_PER_LAYER = 84;
+static const uint64_t WEIGHT_COUNT_PER_LAYER = 110;
 
 DeepseekV2DecoderLayerImpl::DeepseekV2DecoderLayerImpl(
     const ModelContext& context,
@@ -322,7 +352,7 @@ void DeepseekV2DecoderLayerImpl::initialize_attention_parameters(
   param.kvLoraRank = args.kv_lora_rank();
   param.softmaxScale = sm_scale_;
   if (quantize_type_ == "w8a8_dynamic" && num_speculative_tokens_ == 0) {
-    param.enableMlaPreprocess = param.isBF16 ? false : true;
+    param.enableMlaPreprocess = true;
   } else {
     param.enableMlaPreprocess = false;
   }
@@ -330,6 +360,9 @@ void DeepseekV2DecoderLayerImpl::initialize_attention_parameters(
   param.enableFA3 = false;           // TODO
   param.isNzCache = false;           // TODO
   param.enableKvQuantLayer = false;  // TODO
+  param.index_head_dim = args.index_head_dim();
+  param.index_n_heads = args.index_n_heads();
+  param.index_topk = args.index_topk();
 }
 
 void DeepseekV2DecoderLayerImpl::initialize_mlp_parameters(
@@ -955,7 +988,20 @@ void DeepseekV2DecoderLayerImpl::build_node_variant_pack(
                 model_name_ << " inTensor " << i << " is NULL");
     node.variantPack.inTensors.at(i) = *node.inTensors.at(i);
   }
-
+  if (!FLAGS_enable_continuous_kvcache) {
+    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 30) =
+        atb_speed::Utils::AtTensor2Tensor(kv_cache.get_index_cache());
+  } else {
+    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 30) =
+        XTensor2Tensor(kv_cache.get_v_xtensor());
+  }
+  if (input_params.q_seq_lens.numel() != 0) {
+    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31) =
+        atb_speed::Utils::AtTensor2Tensor(input_params.cum_q_seq_lens);
+  } else {
+    node.variantPack.inTensors.at(WEIGHT_COUNT_PER_LAYER + 31) =
+        atb_speed::Utils::AtTensor2Tensor(int_tensor_placeholder_);
+  }
   node.variantPack.outTensors.at(0) = internal_tensor_;
 }
 
