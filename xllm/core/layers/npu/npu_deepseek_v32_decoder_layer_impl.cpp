@@ -18,6 +18,7 @@ limitations under the License.
 #include <gflags/gflags.h>
 
 #include <boost/algorithm/string.hpp>
+#include <iostream>
 #include <utility>
 
 #include "common/global_flags.h"
@@ -186,7 +187,6 @@ DeepseekV32DecoderLayerImpl::DeepseekV32DecoderLayerImpl(
   param_from_args(decode_param_, model_args, parallel_args, false);
   param_from_args(decode_mla_param_, model_args, parallel_args, false);
   decode_mla_param_.enableCustomizeMla = FLAGS_enable_customize_mla_kernel;
-
   loader_ = std::make_unique<DeekseekV32DecoderLoader>(
       WEIGHT_COUNT_PER_LAYER,
       context,

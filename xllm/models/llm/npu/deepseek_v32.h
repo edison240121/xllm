@@ -28,14 +28,14 @@ limitations under the License.
 #include "core/framework/model/npu_dp_ep_padding.h"
 #include "core/framework/model_context.h"
 #include "core/layers/common/attention_mask.h"
-#include "core/layers/deepseek_v2_decoder_layer.h"
+#include "core/layers/deepseek_v32_decoder_layer.h"
 #include "core/layers/lm_head.h"
 #include "core/layers/npu/npu_rms_norm_impl.h"
 #include "core/layers/npu/rotary_embedding.h"
 #include "core/layers/pos_embedding.h"
 #include "core/layers/word_embedding.h"
 #include "models/model_registry.h"
-// DeepSeek v2 compatible with huggingface weights
+// DeepSeek v32 compatible with huggingface weights
 // ref to:
 // https://github.com/vllm-project/vllm/blob/v0.6.6/vllm/model_executor/models/deepseek_v2.py
 
@@ -44,12 +44,12 @@ namespace xllm {
 using torch::indexing::None;
 using ISlice = torch::indexing::Slice;
 
-class DeepseekV2DecoderLayerImpl : public torch::nn::Module {
+class DeepseekV32DecoderLayerImpl : public torch::nn::Module {
  public:
-  DeepseekV2DecoderLayerImpl(const ModelContext& context, const int32_t i) {
+  DeepseekV32DecoderLayerImpl(const ModelContext& context, const int32_t i) {
     // register submodules
-    decoder_layer_ = register_module("decoder_layer",
-                                     layer::DeepseekV2DecoderLayer(context, i));
+    decoder_layer_ = register_module(
+        "decoder_layer", layer::DeepseekV32DecoderLayer(context, i));
   }
 
   torch::Tensor forward(torch::Tensor& x,
@@ -87,13 +87,13 @@ class DeepseekV2DecoderLayerImpl : public torch::nn::Module {
   void update_expert_weight() { decoder_layer_->update_expert_weight(); }
 
  private:
-  layer::DeepseekV2DecoderLayer decoder_layer_{nullptr};
+  layer::DeepseekV32DecoderLayer decoder_layer_{nullptr};
 };
-TORCH_MODULE(DeepseekV2DecoderLayer);
+TORCH_MODULE(DeepseekV32DecoderLayer);
 
-class DeepseekV2ModelImpl : public torch::nn::Module {
+class DeepseekV32ModelImpl : public torch::nn::Module {
  public:
-  DeepseekV2ModelImpl(const ModelContext& context)
+  DeepseekV32ModelImpl(const ModelContext& context)
       : device_(context.get_tensor_options().device()) {
     auto options = context.get_tensor_options();
     auto model_args = context.get_model_args();
@@ -121,7 +121,7 @@ class DeepseekV2ModelImpl : public torch::nn::Module {
                                       /*mask_value=*/mask_value);
 
     for (int32_t i = 0; i < model_args.n_layers(); ++i) {
-      auto block = DeepseekV2DecoderLayer(context, i);
+      auto block = DeepseekV32DecoderLayer(context, i);
       layers_.push_back(block);
       blocks_->push_back(block);
     }
@@ -235,7 +235,7 @@ class DeepseekV2ModelImpl : public torch::nn::Module {
 
  private:
   torch::nn::ModuleList blocks_{nullptr};
-  std::vector<DeepseekV2DecoderLayer> layers_;
+  std::vector<DeepseekV32DecoderLayer> layers_;
   int32_t max_seq_len_ = 0;
   int32_t dp_rank_;
   int32_t rank_;
@@ -252,12 +252,12 @@ class DeepseekV2ModelImpl : public torch::nn::Module {
   layer::AttentionMask attn_mask_;
   layer::RMSNorm norm_{nullptr};
 };
-TORCH_MODULE(DeepseekV2Model);
+TORCH_MODULE(DeepseekV32Model);
 
-class DeepseekV2ForCausalLMImpl : public torch::nn::Module {
+class DeepseekV32ForCausalLMImpl : public torch::nn::Module {
  public:
-  DeepseekV2ForCausalLMImpl(const ModelContext& context) {
-    model_ = register_module("model", DeepseekV2Model(context));
+  DeepseekV32ForCausalLMImpl(const ModelContext& context) {
+    model_ = register_module("model", DeepseekV32Model(context));
     lm_head_ = register_module("lm_head", layer::LmHead(context));
     first_k_dense_replace_ = context.get_model_args().first_k_dense_replace();
   }
@@ -317,52 +317,55 @@ class DeepseekV2ForCausalLMImpl : public torch::nn::Module {
   }
 
  private:
-  DeepseekV2Model model_{nullptr};
+  DeepseekV32Model model_{nullptr};
   layer::LmHead lm_head_{nullptr};
   int32_t first_k_dense_replace_;
 };
-TORCH_MODULE(DeepseekV2ForCausalLM);
+TORCH_MODULE(DeepseekV32ForCausalLM);
 
 // register the causal model
-REGISTER_CAUSAL_MODEL(deepseek_v2, DeepseekV2ForCausalLM);
+REGISTER_CAUSAL_MODEL(deepseek_v32, DeepseekV32ForCausalLM);
 
 // register the model args
 // example config:
 // https://huggingface.co/deepseek-ai/DeepSeek-V2-Lite/blob/main/config.json
-REGISTER_MODEL_ARGS(deepseek_v2, [&] {
-  LOAD_ARG_OR(model_type, "model_type", "deepseek_v2");
+REGISTER_MODEL_ARGS(deepseek_v32, [&] {
+  LOAD_ARG_OR(model_type, "model_type", "deepseek_v32");
   LOAD_ARG_OR(dtype, "torch_dtype", "");
-  LOAD_ARG_OR(vocab_size, "vocab_size", 102400);
-  LOAD_ARG_OR(hidden_size, "hidden_size", 2048);
-  LOAD_ARG_OR(n_layers, "num_hidden_layers", 27);
-  LOAD_ARG_OR(n_heads, "num_attention_heads", 16);
-  LOAD_ARG_OR(n_kv_heads, "num_key_value_heads", 16);
-  LOAD_ARG_OR(intermediate_size, "intermediate_size", 10944);
+  LOAD_ARG_OR(vocab_size, "vocab_size", 129280);
+  LOAD_ARG_OR(hidden_size, "hidden_size", 7168);
+  LOAD_ARG_OR(n_layers, "num_hidden_layers", 61);
+  LOAD_ARG_OR(n_heads, "num_attention_heads", 128);
+  LOAD_ARG_OR(n_kv_heads, "num_key_value_heads", 128);
+  LOAD_ARG_OR(intermediate_size, "intermediate_size", 18432);
   LOAD_ARG_OR(max_position_embeddings, "max_position_embeddings", 163840);
   LOAD_ARG_OR(rms_norm_eps, "rms_norm_eps", 1e-6);
-  LOAD_ARG_OR(eos_token_id, "eos_token_id", 100001);
-  LOAD_ARG_OR(bos_token_id, "bos_token_id", 100000);
+  LOAD_ARG_OR(eos_token_id, "eos_token_id", 1);
+  LOAD_ARG_OR(bos_token_id, "bos_token_id", 0);
   LOAD_ARG_OR(rope_theta, "rope_theta", 10000.0f);
   LOAD_ARG_OR(use_sliding_window, "use_sliding_window", false);
   LOAD_ARG_OR(sliding_window, "sliding_window", 4096);
-  LOAD_ARG_OR(max_window_layers, "max_window_layers", 27);
+  LOAD_ARG_OR(max_window_layers, "max_window_layers", 61);
 
-  LOAD_ARG_OR(first_k_dense_replace, "first_k_dense_replace", 1);
+  LOAD_ARG_OR(first_k_dense_replace, "first_k_dense_replace", 3);
   LOAD_ARG_OR(moe_layer_freq, "moe_layer_freq", 1);
-  LOAD_ARG_OR(topk_method, "topk_method", "greedy");
-  LOAD_ARG_OR(n_routed_experts, "n_routed_experts", 64);
-  LOAD_ARG_OR(n_shared_experts, "n_shared_experts", 2);
-  LOAD_ARG_OR(num_experts_per_tok, "num_experts_per_tok", 6);
-  LOAD_ARG_OR(moe_intermediate_size, "moe_intermediate_size", 1408);
-  LOAD_ARG_OR(routed_scaling_factor, "routed_scaling_factor", 1.0f);
-  LOAD_ARG_OR(norm_topk_prob, "norm_topk_prob", false);
-  LOAD_ARG_OR(n_group, "n_group", 1);
-  LOAD_ARG_OR(topk_group, "topk_group", 1);
+  LOAD_ARG_OR(topk_method, "topk_method", "noaux_tc");
+  LOAD_ARG_OR(n_routed_experts, "n_routed_experts", 256);
+  LOAD_ARG_OR(n_shared_experts, "n_shared_experts", 1);
+  LOAD_ARG_OR(num_experts_per_tok, "num_experts_per_tok", 8);
+  LOAD_ARG_OR(moe_intermediate_size, "moe_intermediate_size", 2048);
+  LOAD_ARG_OR(routed_scaling_factor, "routed_scaling_factor", 2.5f);
+  LOAD_ARG_OR(norm_topk_prob, "norm_topk_prob", true);
+  LOAD_ARG_OR(n_group, "n_group", 8);
+  LOAD_ARG_OR(topk_group, "topk_group", 4);
   LOAD_ARG_OR(qk_nope_head_dim, "qk_nope_head_dim", 128);
   LOAD_ARG_OR(qk_rope_head_dim, "qk_rope_head_dim", 64);
   LOAD_ARG_OR(v_head_dim, "v_head_dim", 128);
-  LOAD_ARG_OR(q_lora_rank, "q_lora_rank", 0);
+  LOAD_ARG_OR(q_lora_rank, "q_lora_rank", 1536);
   LOAD_ARG_OR(kv_lora_rank, "kv_lora_rank", 512);
+  LOAD_ARG_OR(index_head_dim, "index_head_dim", 128);
+  LOAD_ARG_OR(index_n_heads, "index_n_heads", 0);
+  LOAD_ARG_OR(index_topk, "index_topk", 2048);
 
   LOAD_ARG_OR_FUNC(head_dim, "head_dim", [&] {
     return 256;  // args->qk_nope_head_dim() + args->qk_rope_head_dim();
@@ -382,6 +385,6 @@ REGISTER_MODEL_ARGS(deepseek_v2, [&] {
            "rope_scaling.original_max_position_embeddings");
   LOAD_ARG_OR(rope_scaling_attn_factor, "rope_scaling.attn_factor", 1.0f);
 
-  SET_ARG(stop_token_ids, std::unordered_set<int32_t>({100001}));
+  SET_ARG(stop_token_ids, std::unordered_set<int32_t>({1}));
 });
 }  // namespace xllm

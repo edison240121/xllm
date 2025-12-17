@@ -16,6 +16,8 @@ limitations under the License.
 
 #include <torch_npu/csrc/core/npu/NPUFormat.h>
 
+#include <iostream>
+
 namespace xllm {
 namespace layer {
 
@@ -325,7 +327,7 @@ void DeekseekV2DecoderLoader::load_state_dict(const StateDict& state_dict) {
       process_mlp_common_weights(state_dict, name, tensor);
       continue;
     }
-
+    std::cout << "-------process_general_weights- v2----" << std::endl;
     process_general_weights(state_dict, name, tensor);
   }
 }
