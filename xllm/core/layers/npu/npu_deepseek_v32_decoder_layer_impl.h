@@ -27,89 +27,20 @@ limitations under the License.
 #include "framework/model/npu_dp_ep_padding.h"
 #include "framework/model_context.h"
 #include "framework/state_dict/state_dict.h"
-#include "loader/deepseek_v2_decoder_loader.h"
+#include "loader/deepseek_v32_decoder_loader.h"
 #include "npu_base_layer.h"
+#include "npu_deepseek_v2_decoder_layer_impl.h"
 #include "xllm_kernels/models/deepseekv2/layer/decoder_layer.h"
 
 namespace xllm {
 namespace layer {
 
-class ExpertBuffer {
+class DeepseekV32DecoderLayerImpl : public BaseLayer {
  public:
-  torch::Tensor gateup_weight;
-  torch::Tensor gateup_offset;
-  torch::Tensor gateup_scale;
-  torch::Tensor down_weight;
-  torch::Tensor down_offset;
-  torch::Tensor down_scale;
+  explicit DeepseekV32DecoderLayerImpl(const ModelContext& context,
+                                       const int32_t layer_id);
 
-  static ExpertBuffer& Instance() {
-    static ExpertBuffer instance;
-    return instance;
-  }
-
-  void initialize_or_reuse(const std::vector<int64_t>& gateup_weight_shape,
-                           const std::vector<int64_t>& gateup_offset_shape,
-                           const std::vector<int64_t>& gateup_scale_shape,
-                           const std::vector<int64_t>& down_weight_shape,
-                           const std::vector<int64_t>& down_offset_shape,
-                           const std::vector<int64_t>& down_scale_shape,
-                           const torch::TensorOptions& weight_options,
-                           const torch::TensorOptions& offset_options,
-                           const torch::TensorOptions& scale_options,
-
-                           bool force_reinit = false) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    if (force_reinit) {
-      initialized_ = false;
-    }
-
-    if (!initialized_) {
-      gateup_weight =
-          torch::empty(gateup_weight_shape, weight_options).contiguous();
-      gateup_offset =
-          torch::empty(gateup_offset_shape, offset_options).contiguous();
-      gateup_scale =
-          torch::empty(gateup_scale_shape, scale_options).contiguous();
-      down_weight =
-          torch::empty(down_weight_shape, weight_options).contiguous();
-      down_offset =
-          torch::empty(down_offset_shape, offset_options).contiguous();
-      down_scale = torch::empty(down_scale_shape, scale_options).contiguous();
-      initialized_ = true;
-    } else {
-      auto validate_shape = [](const torch::Tensor& t,
-                               const std::vector<int64_t>& expected) {
-        CHECK_EQ(t.sizes(), expected)
-            << "Shape mismatch. Expected " << expected << " got " << t.sizes();
-      };
-
-      validate_shape(gateup_weight, gateup_weight_shape);
-      validate_shape(gateup_offset, gateup_offset_shape);
-      validate_shape(down_weight, down_weight_shape);
-      validate_shape(down_offset, down_offset_shape);
-      // gateup_weight = at_npu::native::npu_format_cast(
-      //   gateup_weight.contiguous(), 2);
-      gateup_offset = gateup_offset.contiguous();
-      gateup_scale = gateup_scale.contiguous();
-      down_weight = down_weight.contiguous();
-      down_offset = down_offset.contiguous();
-      down_scale = down_scale.contiguous();
-    }
-  }
-
- private:
-  std::mutex mutex_;
-  bool initialized_ = false;
-};
-
-class DeepseekV2DecoderLayerImpl : public BaseLayer {
- public:
-  explicit DeepseekV2DecoderLayerImpl(const ModelContext& context,
-                                      const int32_t layer_id);
-
-  ~DeepseekV2DecoderLayerImpl() {};
+  ~DeepseekV32DecoderLayerImpl() {};
 
   virtual void merge_loaded_weights() override;
 

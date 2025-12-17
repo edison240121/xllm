@@ -29,6 +29,7 @@ limitations under the License.
 #include "core/framework/model_context.h"
 #include "core/layers/common/attention_mask.h"
 #include "core/layers/deepseek_v2_decoder_layer.h"
+#include "core/layers/deepseek_v32_decoder_layer.h"
 #include "core/layers/lm_head.h"
 #include "core/layers/npu/npu_rms_norm_impl.h"
 #include "core/layers/npu/rotary_embedding.h"
@@ -91,6 +92,54 @@ class DeepseekV2DecoderLayerImpl : public torch::nn::Module {
 };
 TORCH_MODULE(DeepseekV2DecoderLayer);
 
+class DeepseekV32DecoderLayerImpl : public DeepseekV2DecoderLayerImpl {
+ public:
+  DeepseekV32DecoderLayerImpl(const ModelContext& context, const int32_t i)
+      : DeepseekV2DecoderLayerImpl(context, i) {
+    // register submodules
+    decoder_layer_v32_ = register_module(
+        "decoder_layer", layer::DeepseekV32DecoderLayer(context, i));
+  }
+
+  torch::Tensor forward(torch::Tensor& x,
+                        torch::Tensor& cos_pos,
+                        torch::Tensor& sin_pos,
+                        torch::Tensor& attn_mask,
+                        KVCache& kv_cache,
+                        const ModelInputParams& input_params,
+                        aclrtEvent* event,
+                        std::atomic<bool>* event_flag) {
+    return decoder_layer_v32_(x,
+                              cos_pos,
+                              sin_pos,
+                              attn_mask,
+                              kv_cache,
+                              input_params,
+                              event,
+                              event_flag);
+  }
+
+  void load_state_dict(const StateDict& state_dict) {
+    decoder_layer_v32_->load_state_dict(state_dict);
+  }
+
+  void verify_loaded_weights(const std::string& prefix) const {
+    decoder_layer_v32_->verify_loaded_weights(prefix);
+  }
+
+  void merge_loaded_weights() { decoder_layer_v32_->merge_loaded_weights(); }
+
+  void prepare_expert_weight(const std::vector<int32_t>& expert_list) {
+    decoder_layer_v32_->prepare_expert_weight(expert_list);
+  }
+
+  void update_expert_weight() { decoder_layer_v32_->update_expert_weight(); }
+
+ private:
+  layer::DeepseekV32DecoderLayer decoder_layer_v32_{nullptr};
+};
+TORCH_MODULE(DeepseekV32DecoderLayer);
+
 class DeepseekV2ModelImpl : public torch::nn::Module {
  public:
   DeepseekV2ModelImpl(const ModelContext& context)
@@ -122,6 +171,11 @@ class DeepseekV2ModelImpl : public torch::nn::Module {
 
     for (int32_t i = 0; i < model_args.n_layers(); ++i) {
       auto block = DeepseekV2DecoderLayer(context, i);
+      if (model_args.index_n_heads() == 0) {
+        auto block = DeepseekV2DecoderLayer(context, i);
+      } else {
+        auto block = DeepseekV32DecoderLayer(context, i);
+      }
       layers_.push_back(block);
       blocks_->push_back(block);
     }
