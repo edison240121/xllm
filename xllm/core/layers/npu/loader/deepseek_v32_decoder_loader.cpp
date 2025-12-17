@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "deepseek_v2_decoder_loader.h"
+#include "deepseek_v32_decoder_loader.h"
 
 #include <torch_npu/csrc/core/npu/NPUFormat.h>
 
@@ -286,7 +286,7 @@ static std::vector<std::string> LINEAR_FOR_ROPE = {
     "self_attn.kv_a_proj_with_mqa.deq_scale",
 };
 
-DeekseekV2DecoderLoader::DeekseekV2DecoderLoader(
+DeekseekV32DecoderLoader::DeekseekV32DecoderLoader(
     uint64_t weight_count,
     const ModelContext& context,
     int32_t layer_id,
@@ -338,14 +338,14 @@ DeekseekV2DecoderLoader::DeekseekV2DecoderLoader(
   initialize_weight_tensors(options);
 }
 
-void DeekseekV2DecoderLoader::initialize_tensors(
+void DeekseekV32DecoderLoader::initialize_tensors(
     const torch::TensorOptions& options) {
   tensor_placeholder_ = torch::zeros({1}).to(options);
   reserve_experts_weights(prefill_numOfDeviceExperts_);
   initialize_device_expert_list(decode_worldSize_, num_experts_per_partition_);
 }
 
-void DeekseekV2DecoderLoader::load_state_dict(const StateDict& state_dict) {
+void DeekseekV32DecoderLoader::load_state_dict(const StateDict& state_dict) {
   for (const auto& [name, tensor] : state_dict) {
     bool is_sharded = false;
     int index = 0;
@@ -375,7 +375,7 @@ void DeekseekV2DecoderLoader::load_state_dict(const StateDict& state_dict) {
   }
 }
 
-void DeekseekV2DecoderLoader::verify_loaded_weights(
+void DeekseekV32DecoderLoader::verify_loaded_weights(
     const std::string& prefix) const {
   for (const auto& [index, name] : WEIGHT_MAPPING) {
     CHECK(at_weight_tensors_[index].sizes() != std::vector<int64_t>({1}))
@@ -383,7 +383,7 @@ void DeekseekV2DecoderLoader::verify_loaded_weights(
   }
 }
 
-int DeekseekV2DecoderLoader::extract_expert_index(const std::string& name) {
+int DeekseekV32DecoderLoader::extract_expert_index(const std::string& name) {
   std::string prefix = "experts.";
   size_t pos = name.find(prefix);
   if (pos != std::string::npos) {
@@ -399,7 +399,7 @@ int DeekseekV2DecoderLoader::extract_expert_index(const std::string& name) {
   return -1;
 }
 
-void DeekseekV2DecoderLoader::process_expert_weights(
+void DeekseekV32DecoderLoader::process_expert_weights(
     const StateDict& state_dict,
     const std::string& name,
     const torch::Tensor& tensor) {
@@ -482,7 +482,7 @@ void DeekseekV2DecoderLoader::process_expert_weights(
   }
 }
 
-void DeekseekV2DecoderLoader::initialize_weight_tensors(
+void DeekseekV32DecoderLoader::initialize_weight_tensors(
     const torch::TensorOptions& options) {
   for (int i = 0; i < weight_count_; ++i) {
     at_weight_tensors_[i] = torch::zeros({1}).to(options);
@@ -496,7 +496,7 @@ void DeekseekV2DecoderLoader::initialize_weight_tensors(
   }
 }
 
-void DeekseekV2DecoderLoader::convert_offsets_to_int8() {
+void DeekseekV32DecoderLoader::convert_offsets_to_int8() {
   auto convert_to_int8 = [this](int index) {
     at_weight_tensors_[index] =
         at_weight_tensors_[index].to(torch::kInt8).to(device_);
@@ -507,7 +507,7 @@ void DeekseekV2DecoderLoader::convert_offsets_to_int8() {
   convert_to_int8(IN_ATTENTION_OUT_OFFSET);
 }
 
-void DeekseekV2DecoderLoader::handle_device_specific_bias() {
+void DeekseekV32DecoderLoader::handle_device_specific_bias() {
   if (dp_local_tp_rank_ != 0) {
     torch::Tensor original_tensor = at_weight_tensors_[IN_ATTENTION_OUT_BIAS];
     at_weight_tensors_[IN_ATTENTION_OUT_BIAS] =
@@ -518,7 +518,7 @@ void DeekseekV2DecoderLoader::handle_device_specific_bias() {
   }
 }
 
-std::string DeekseekV2DecoderLoader::extract_endswith(
+std::string DeekseekV32DecoderLoader::extract_endswith(
     const std::string& input) {
   std::vector<std::string> parts;
   std::stringstream ss(input);
@@ -533,7 +533,7 @@ std::string DeekseekV2DecoderLoader::extract_endswith(
   return result;
 }
 
-torch::Tensor DeekseekV2DecoderLoader::get_sharded_tensor(
+torch::Tensor DeekseekV32DecoderLoader::get_sharded_tensor(
     const StateDict& state_dict,
     const std::string& name,
     int dim) {
@@ -545,7 +545,7 @@ torch::Tensor DeekseekV2DecoderLoader::get_sharded_tensor(
   }
 }
 
-torch::Tensor DeekseekV2DecoderLoader::get_sharded_tensor(
+torch::Tensor DeekseekV32DecoderLoader::get_sharded_tensor(
     const StateDict& state_dict,
     const std::string& name,
     int dim,
@@ -559,7 +559,7 @@ torch::Tensor DeekseekV2DecoderLoader::get_sharded_tensor(
   }
 }
 
-int DeekseekV2DecoderLoader::get_mapped_index(
+int DeekseekV32DecoderLoader::get_mapped_index(
     const std::string& name,
     const std::unordered_map<std::string, int>& mapping) {
   const auto it = mapping.find(name);
@@ -571,7 +571,7 @@ int DeekseekV2DecoderLoader::get_mapped_index(
   return it->second;
 }
 
-void DeekseekV2DecoderLoader::squeeze_experts_weights() {
+void DeekseekV32DecoderLoader::squeeze_experts_weights() {
   for (const auto& index : SQUEEZE_WEIGHT_VEC) {
     if (at_weight_tensors_[index].dim() > 1) {
       at_weight_tensors_[index] = at_weight_tensors_[index].squeeze();
@@ -579,7 +579,7 @@ void DeekseekV2DecoderLoader::squeeze_experts_weights() {
   }
 }
 
-void DeekseekV2DecoderLoader::process_general_weights(
+void DeekseekV32DecoderLoader::process_general_weights(
     const StateDict& state_dict,
     const std::string& name,
     const torch::Tensor& tensor) {
@@ -610,7 +610,7 @@ void DeekseekV2DecoderLoader::process_general_weights(
   }
 }
 
-void DeekseekV2DecoderLoader::process_mlp_common_weights(
+void DeekseekV32DecoderLoader::process_mlp_common_weights(
     const StateDict& state_dict,
     const std::string& name,
     const torch::Tensor& tensor) {
@@ -636,7 +636,7 @@ void DeekseekV2DecoderLoader::process_mlp_common_weights(
   }
 }
 
-void DeekseekV2DecoderLoader::merge_experts_weights() {
+void DeekseekV32DecoderLoader::merge_experts_weights() {
   torch::Tensor mlp_gateup_weight =
       merge_experts_weights(experts_weights_["gate_proj.weight"],
                             experts_weights_["up_proj.weight"],
@@ -692,7 +692,7 @@ void DeekseekV2DecoderLoader::merge_experts_weights() {
   }
 }
 
-torch::Tensor DeekseekV2DecoderLoader::merge_experts_weights(
+torch::Tensor DeekseekV32DecoderLoader::merge_experts_weights(
     std::vector<torch::Tensor>& experts,
     at::Device device,
     bool transpose) {
@@ -705,7 +705,7 @@ torch::Tensor DeekseekV2DecoderLoader::merge_experts_weights(
   return merged_tensor;
 }
 
-torch::Tensor DeekseekV2DecoderLoader::merge_experts_weights(
+torch::Tensor DeekseekV32DecoderLoader::merge_experts_weights(
     std::vector<torch::Tensor>& experts_gate,
     std::vector<torch::Tensor>& experts_up,
     at::Device device,
@@ -726,7 +726,7 @@ torch::Tensor DeekseekV2DecoderLoader::merge_experts_weights(
   return merged_tensor;
 }
 
-void DeekseekV2DecoderLoader::process_shared_expert_weights(
+void DeekseekV32DecoderLoader::process_shared_expert_weights(
     const StateDict& state_dict,
     const std::string& name,
     const torch::Tensor& tensor) {
@@ -752,10 +752,10 @@ void DeekseekV2DecoderLoader::process_shared_expert_weights(
   }
 }
 
-void DeekseekV2DecoderLoader::set_kv_weight(const StateDict& state_dict,
-                                            const std::string& tensor_name,
-                                            int weight_position,
-                                            int dim) {
+void DeekseekV32DecoderLoader::set_kv_weight(const StateDict& state_dict,
+                                             const std::string& tensor_name,
+                                             int weight_position,
+                                             int dim) {
   torch::Tensor mutable_tensor;
   if (parallel_args_.world_size() <= 1) {
     mutable_tensor = state_dict.get_tensor(tensor_name).to(device_);
@@ -784,7 +784,7 @@ void DeekseekV2DecoderLoader::set_kv_weight(const StateDict& state_dict,
   at_weight_tensors_[weight_position + 6] = v_b_proj_preprocessed.to(device_);
 }
 
-void DeekseekV2DecoderLoader::preprocess_linear_for_rope() {
+void DeekseekV32DecoderLoader::preprocess_linear_for_rope() {
   for (const auto& name : LINEAR_FOR_ROPE) {
     if (quantize_type_ == "") {
       if (!absl::EndsWith(name, "weight")) {
@@ -802,9 +802,9 @@ void DeekseekV2DecoderLoader::preprocess_linear_for_rope() {
   }
 }
 
-torch::Tensor DeekseekV2DecoderLoader::view_tensor(torch::Tensor weight,
-                                                   const std::string& name,
-                                                   bool pre_view) {
+torch::Tensor DeekseekV32DecoderLoader::view_tensor(torch::Tensor weight,
+                                                    const std::string& name,
+                                                    bool pre_view) {
   if (absl::StrContains(name, "q_b_proj")) {
     if (pre_view) {
       return weight
@@ -826,7 +826,8 @@ torch::Tensor DeekseekV2DecoderLoader::view_tensor(torch::Tensor weight,
   return weight;
 }
 
-torch::Tensor DeekseekV2DecoderLoader::trans_rope_weight(torch::Tensor weight) {
+torch::Tensor DeekseekV32DecoderLoader::trans_rope_weight(
+    torch::Tensor weight) {
   int64_t d = weight.size(-2);
   int64_t rope_dim = prefill_qkRopeHeadDim_;
   torch::Tensor weight_1 =
@@ -842,7 +843,7 @@ torch::Tensor DeekseekV2DecoderLoader::trans_rope_weight(torch::Tensor weight) {
   return weight.contiguous();
 }
 
-void DeekseekV2DecoderLoader::initialize_device_expert_list(
+void DeekseekV32DecoderLoader::initialize_device_expert_list(
     int num_device,
     int num_device_expert) {
   int32_t num_device_route_expert = num_device_expert;
@@ -859,7 +860,7 @@ void DeekseekV2DecoderLoader::initialize_device_expert_list(
   }
 }
 
-torch::Tensor DeekseekV2DecoderLoader::convert_fp16_to_int64(
+torch::Tensor DeekseekV32DecoderLoader::convert_fp16_to_int64(
     const torch::Tensor& fp16_tensor) {
   auto float_tensor = fp16_tensor.to(torch::kFloat32);
   auto int32_tensor = float_tensor.view(torch::kInt32);
@@ -867,7 +868,7 @@ torch::Tensor DeekseekV2DecoderLoader::convert_fp16_to_int64(
   return int64_tensor;
 }
 
-void DeekseekV2DecoderLoader::convert_descaled_weights_to_float() {
+void DeekseekV32DecoderLoader::convert_descaled_weights_to_float() {
   auto convert_to_float = [this](int index) {
     at_weight_tensors_[index] = at_weight_tensors_[index].to(torch::kFloat32);
   };
@@ -877,7 +878,7 @@ void DeekseekV2DecoderLoader::convert_descaled_weights_to_float() {
   convert_to_float(IN_ATTENTION_OUT_DESCALE);
 }
 
-void DeekseekV2DecoderLoader::reserve_experts_weights(
+void DeekseekV32DecoderLoader::reserve_experts_weights(
     int num_of_device_experts) {
   experts_weights_.clear();
   std::vector<std::string> weight_names = {
@@ -897,7 +898,7 @@ void DeekseekV2DecoderLoader::reserve_experts_weights(
   }
 }
 
-std::string DeekseekV2DecoderLoader::get_expert_shm_key(
+std::string DeekseekV32DecoderLoader::get_expert_shm_key(
     int32_t layer_id,
     int32_t expert_index,
     const std::string& suffix) {
@@ -907,7 +908,7 @@ std::string DeekseekV2DecoderLoader::get_expert_shm_key(
   return shm_key;
 }
 
-void DeekseekV2DecoderLoader::merge_shared_experts_weights() {
+void DeekseekV32DecoderLoader::merge_shared_experts_weights() {
   auto merge_and_clear = [this](int index,
                                 torch::Tensor& shared_experts_gate,
                                 torch::Tensor& shared_experts_up) {
@@ -949,7 +950,7 @@ void DeekseekV2DecoderLoader::merge_shared_experts_weights() {
   }
 }
 
-void DeekseekV2DecoderLoader::merge_loaded_weights() {
+void DeekseekV32DecoderLoader::merge_loaded_weights() {
   if (quantize_type_ == "w8a8_dynamic") {
     if (prefill_isBF16_) {
       convert_descaled_weights_to_float();
