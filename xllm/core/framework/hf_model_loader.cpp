@@ -166,6 +166,7 @@ bool HFModelLoader::load_model_args(const std::string& model_weights_path) {
     LOG(ERROR) << "Failed to find model_type in " << args_file_path;
     return false;
   }
+
   auto model_args_loader = ModelRegistry::get_model_args_loader(model_type);
   if (model_args_loader == nullptr) {
     LOG(ERROR) << "Failed to find model args loader for model type "
