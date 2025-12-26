@@ -59,8 +59,6 @@ cc_library(
     :platform
     SMHasherSupport
 )
-target_link_libraries(util PRIVATE OpenSSL::SSL OpenSSL::Crypto)
-add_dependencies(util brpc-static)
 
 cc_test(
   NAME

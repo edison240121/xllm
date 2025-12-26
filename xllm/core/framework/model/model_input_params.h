@@ -18,16 +18,130 @@ limitations under the License.
 
 #include <torch/torch.h>
 
+#include <optional>
+#include <variant>
+
 #if defined(USE_NPU)
 #include "platform/npu/npu_layer_synchronizer.h"
 #endif
 #include "framework/batch/batch_forward_type.h"
-#include "framework/request/mm_data.h"
+#include "framework/request/mm_batch_data.h"
 #include "npu_dp_ep_padding.h"
 #include "util/hash_util.h"
 #include "util/tensor_helper.h"
 
 namespace xllm {
+
+struct OneRecModelInputParams {
+  enum class RecStage {
+    PREFILL,
+    DECODE,
+  };
+
+  RecStage rec_stage = RecStage::PREFILL;
+  bool is_hybrid_mode = false;
+  bool is_encoder_forward = false;
+  bool has_encoder_output = false;
+  std::vector<int32_t> encoder_seq_lens;
+  torch::Tensor encoder_seq_lens_tensor;
+  int32_t encoder_max_seq_len = 0;
+
+  bool is_first_prefill = true;
+  int32_t bs = 0;
+  int32_t group_width = 0;
+  int32_t seq_len = 0;
+  std::vector<std::vector<int32_t>> generated_tokens;
+  torch::Tensor encoder_sparse_embedding;
+  torch::Tensor decoder_context_embedding;
+
+  torch::Tensor cross_attn_kv_cu_seq_lens;
+  torch::Tensor cross_attn_new_cache_slots;
+  torch::Tensor cross_attn_block_tables;
+  std::vector<int> cross_attn_kv_cu_seq_lens_vec;
+
+  torch::Tensor encoder_token_ids;
+  torch::Tensor encoder_positions;
+
+  OneRecModelInputParams to(const c10::Device& device) const {
+    OneRecModelInputParams result = *this;
+
+    if (encoder_seq_lens_tensor.defined()) {
+      result.encoder_seq_lens_tensor = encoder_seq_lens_tensor.to(device);
+    }
+    if (encoder_sparse_embedding.defined()) {
+      result.encoder_sparse_embedding = encoder_sparse_embedding.to(device);
+    }
+    if (decoder_context_embedding.defined()) {
+      result.decoder_context_embedding = decoder_context_embedding.to(device);
+    }
+    if (cross_attn_kv_cu_seq_lens.defined()) {
+      result.cross_attn_kv_cu_seq_lens = cross_attn_kv_cu_seq_lens.to(device);
+    }
+    if (cross_attn_new_cache_slots.defined()) {
+      result.cross_attn_new_cache_slots = cross_attn_new_cache_slots.to(device);
+    }
+    if (cross_attn_block_tables.defined()) {
+      result.cross_attn_block_tables = cross_attn_block_tables.to(device);
+    }
+    if (encoder_token_ids.defined()) {
+      result.encoder_token_ids = encoder_token_ids.to(device);
+    }
+    if (encoder_positions.defined()) {
+      result.encoder_positions = encoder_positions.to(device);
+    }
+
+    return result;
+  }
+
+  void print() const {
+    LOG(INFO) << "OneRecModelInputParams:"
+              << " rec_stage: "
+              << (rec_stage == RecStage::PREFILL ? "PREFILL" : "DECODE")
+              << " is_hybrid_mode: " << is_hybrid_mode
+              << " is_encoder_forward: " << is_encoder_forward
+              << " has_encoder_output: " << has_encoder_output
+              << " encoder_max_seq_len: " << encoder_max_seq_len
+              << " is_first_prefill: " << is_first_prefill << " bs: " << bs
+              << " group_width: " << group_width << " seq_len: " << seq_len
+              << " encoder_seq_lens size: " << encoder_seq_lens.size()
+              << " cross_attn_kv_cu_seq_lens_vec size: "
+              << cross_attn_kv_cu_seq_lens_vec.size()
+              << " generated_tokens size: " << generated_tokens.size();
+    if (encoder_seq_lens_tensor.defined()) {
+      LOG(INFO) << " encoder_seq_lens_tensor shape: "
+                << encoder_seq_lens_tensor.sizes();
+    }
+    if (encoder_sparse_embedding.defined()) {
+      LOG(INFO) << " encoder_sparse_embedding shape: "
+                << encoder_sparse_embedding.sizes();
+    }
+    if (decoder_context_embedding.defined()) {
+      LOG(INFO) << " decoder_context_embedding shape: "
+                << decoder_context_embedding.sizes();
+    }
+    if (cross_attn_kv_cu_seq_lens.defined()) {
+      LOG(INFO) << " cross_attn_kv_cu_seq_lens shape: "
+                << cross_attn_kv_cu_seq_lens.sizes();
+    }
+    if (cross_attn_new_cache_slots.defined()) {
+      LOG(INFO) << " cross_attn_new_cache_slots shape: "
+                << cross_attn_new_cache_slots.sizes();
+    }
+    if (cross_attn_block_tables.defined()) {
+      LOG(INFO) << " cross_attn_block_tables shape: "
+                << cross_attn_block_tables.sizes();
+    }
+    if (encoder_token_ids.defined()) {
+      LOG(INFO) << " encoder_token_ids shape: " << encoder_token_ids.sizes();
+    }
+    if (encoder_positions.defined()) {
+      LOG(INFO) << " encoder_positions shape: " << encoder_positions.sizes();
+    }
+  }
+};
+
+using RecModelInputParams =
+    std::variant<std::monostate, OneRecModelInputParams>;
 
 enum class TransferType : uint8_t {
   G2H = 0,  // global memory(KVCache store) to host memory(DRAM)
@@ -125,7 +239,7 @@ struct ModelInputParams {
     params.deep_stacks = deep_stacks;
     params.visual_pos_masks = visual_pos_masks;
 
-    params.mm_data = MMData::to(mm_data, device);
+    params.mm_data = mm_data.to(device);
     params.dp_global_token_nums = dp_global_token_nums;
     params.embedding_ids = std::move(embedding_ids);
     params.extra_token_ids = std::move(extra_token_ids);
@@ -159,6 +273,10 @@ struct ModelInputParams {
 
     params.batch_id = batch_id;
 
+    if (const auto* onerec = onerec_params()) {
+      params.rec_params = onerec->to(device);
+    }
+
     return params;
   }
 
@@ -179,6 +297,11 @@ struct ModelInputParams {
     print_tensor(block_tables, "ModelInputParams: block_tables", 4);
     LOG(INFO) << "ModelInputParams: dp_global_token_nums is "
               << dp_global_token_nums;
+
+    if (const auto* onerec = onerec_params()) {
+      LOG(INFO) << "ModelInputParams: has rec_params";
+      onerec->print();
+    }
   }
 
   int32_t get_q_seq_len(int32_t seq_idx) const {
@@ -231,7 +354,7 @@ struct ModelInputParams {
   mutable torch::Tensor input_embedding;
 
   // multimodal
-  MMData mm_data;
+  MMBatchData mm_data;
 
   // deep_stack for Qwen3-VL
   mutable std::vector<torch::Tensor> deep_stacks;
@@ -293,6 +416,21 @@ struct ModelInputParams {
   torch::Tensor paged_kv_last_page_len;
 
   uint64_t batch_id;
+
+  RecModelInputParams rec_params;
+
+  const OneRecModelInputParams* onerec_params() const {
+    return std::get_if<OneRecModelInputParams>(&rec_params);
+  }
+
+  bool has_onerec_params() const { return onerec_params() != nullptr; }
+
+  OneRecModelInputParams& mutable_onerec_params() {
+    if (!has_onerec_params()) {
+      rec_params.emplace<OneRecModelInputParams>();
+    }
+    return std::get<OneRecModelInputParams>(rec_params);
+  }
 
   struct GraphBuffer {
     torch::Tensor attn_mask;

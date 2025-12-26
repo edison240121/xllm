@@ -13,34 +13,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#pragma once
-
-#include <brpc/controller.h>
-
-#include <string>
+#include "mm_type.h"
 
 namespace xllm {
 
-class Call {
- public:
-  Call(brpc::Controller* controller);
-  virtual ~Call() = default;
-
-  std::string get_x_request_id() { return x_request_id_; }
-  std::string get_x_request_time() { return x_request_time_; }
-
-  bool get_binary_payload(std::string& payload);
-
-  virtual bool is_disconnected() const = 0;
-
- protected:
-  void init();
-
- protected:
-  brpc::Controller* controller_;
-
-  std::string x_request_id_;
-  std::string x_request_time_;
-};
+std::optional<std::string> MMType::to_string() {
+  switch (value) {
+    case Value::NONE:
+      return std::nullopt;
+    case Value::IMAGE:
+      return "image";
+    case Value::VIDEO:
+      return "video";
+    case Value::AUDIO:
+      return "audio";
+    case Value::EMBEDDING:
+      return "embedding";
+    default:
+      LOG(WARNING) << "Unknown mm type: " << static_cast<int>(value);
+  }
+  return std::nullopt;
+}
 
 }  // namespace xllm

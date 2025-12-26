@@ -1,5 +1,4 @@
 /* Copyright 2025 The xLLM Authors. All Rights Reserved.
-Copyright 2024 The ScaleLLM Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,41 +14,12 @@ limitations under the License.
 ==============================================================================*/
 
 #pragma once
-#include <torch/torch.h>
 
-#include <opencv2/opencv.hpp>
 #include <string>
-
-#include "mm_type.h"
 
 namespace xllm {
 
-class OpenCVImageDecoder {
- public:
-  OpenCVImageDecoder() = default;
-  ~OpenCVImageDecoder() = default;
+constexpr char kInferContentLength[] = "Infer-Content-Length";
+constexpr char kContentLength[] = "Content-Length";
 
-  bool decode(const std::string& raw_data, torch::Tensor& t);
-};
-
-class OpenCVImageEncoder {
- public:
-  OpenCVImageEncoder() = default;
-  ~OpenCVImageEncoder() = default;
-
-  bool encode(const torch::Tensor& t, std::string& raw_data);
-
- private:
-  bool valid(const torch::Tensor& t);
-};
-
-class OpenCVVideoDecoder {
- public:
-  OpenCVVideoDecoder() = default;
-  ~OpenCVVideoDecoder() = default;
-
-  bool decode(const std::string& raw_data,
-              torch::Tensor& t,
-              VideoMetadata& meta);
-};
 }  // namespace xllm
